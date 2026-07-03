@@ -1,177 +1,186 @@
 # Code Auditor
 
-AI-powered code auditor: security, quality, and architecture analysis in one CLI tool.
+AI-аудитор кода: анализ безопасности, качества и архитектуры в одной CLI-утилите.
 
-Combines 6 static analyzers (bandit, radon, vulture, pylint, semgrep, pip-audit) with LLM-based deep analysis to find vulnerabilities, code smells, and architectural issues — outputting structured JSON/Markdown reports with OWASP Top 10 mapping.
+Объединяет 6 статических анализаторов (bandit, radon, vulture, pylint, semgrep, pip-audit) с LLM-анализом для поиска уязвимостей, архитектурных проблем и нарушений качества кода. Генерирует структурированные отчёты в JSON/Markdown/HTML с маппингом OWASP Top 10.
 
-## Features
+## Возможности
 
-- **Security Audit** — SQL injection, XSS, hardcoded secrets, weak crypto, path traversal, SSRF, insecure deserialization (OWASP Top 10)
-- **Code Quality** — Cyclomatic complexity, maintainability index, God objects, SOLID violations, dead code, duplication
-- **Dependency Scanning** — Known CVEs via pip-audit
-- **AI Deep Analysis** — LLM-powered review for architectural issues and subtle vulnerabilities
-- **Multi-provider LLM** — OpenAI, Anthropic Claude, local Ollama via LiteLLM
-- **Structured Reports** — JSON and Markdown with severity breakdown and OWASP mapping
-- **Plugin Architecture** — Add custom analyzers by implementing the `Analyzer` protocol
+- **Аудит безопасности** — SQL-инъекции, XSS, хардкод-секреты, слабая криптография, path traversal, SSRF, небезопасная десериализация (OWASP Top 10)
+- **Качество кода** — цикломатическая сложность, индекс поддерживаемости, God objects, нарушения SOLID, мёртвый код, дублирование
+- **Сканирование зависимостей** — известные CVE через pip-audit
+- **AI-глубокий анализ** — LLM-ревью архитектуры и неочевидных уязвимостей
+- **Мультипровайдерный LLM** — OpenAI, Anthropic Claude, DeepSeek, Groq, локальный Ollama через LiteLLM
+- **Структурированные отчёты** — JSON, Markdown, интерактивный HTML с фильтрами
+- **Плагинная архитектура** — добавляйте свои анализаторы через протокол `Analyzer`
 
-## Quick Start
+## Быстрый старт
 
-### Prerequisites
+### Требования
 
 - Python 3.10+
 - pip
 
-### Installation
+### Установка
 
 ```bash
-# Clone the repository
+# Клонируем репозиторий
 git clone https://github.com/todkavodka/basis_tech2.git
 cd basis_tech2
 
-# Create virtual environment
+# Создаём виртуальное окружение
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install with all analyzer dependencies
+# Устанавливаем со всеми зависимостями анализаторов
 pip install -e ".[analyzers]"
 
-# Install dev dependencies (optional, for running tests)
+# Dev-зависимости (опционально, для тестов)
 pip install -e ".[dev]"
 ```
 
-### Verify Installation
+### Проверка
 
 ```bash
 code-auditor --help
 code-auditor list-analyzers
 ```
 
-## Usage
+## Использование
 
-### Basic Scan
+### Базовое сканирование
 
 ```bash
-# Scan a project (all analyzers, no AI)
+# Сканирование проекта (все анализаторы, без AI)
 code-auditor scan ./my-project --no-ai
 
-# Full scan with AI analysis
+# Полное сканирование с AI-анализом
 code-auditor scan ./my-project
 ```
 
-### Options
+### Опции
 
 ```
-code-auditor scan <path> [OPTIONS]
+code-auditor scan <путь> [ОПЦИИ]
 
-Arguments:
-  PATH                          Path to project directory
+Аргументы:
+  ПУТЬ                            Путь к директории проекта
 
-Options:
-  -a, --analyzer TEXT           Analyzers to run. Repeatable.
-                                [bandit|radon|vulture|pylint|semgrep|pip-audit|ai|all]
-                                Default: all
-  -o, --output TEXT             Output file path (.json or .md)
-  -f, --format TEXT             Report format: json, markdown, both [default: markdown]
-  -s, --severity TEXT           Minimum severity: critical, high, medium, low, info
-                                [default: info]
-  -m, --model TEXT              LLM model for AI analysis
-                                [default: openai/gpt-4o]
-  --no-ai                       Skip AI-powered analysis (offline mode)
-  -v, --verbose                 Verbose output
-  --help                        Show this message and exit
+Опции:
+  -a, --analyzer TEXT             Анализаторы для запуска. Повторяется.
+                                  [bandit|radon|vulture|pylint|semgrep|pip-audit|ai|all]
+                                  По умолчанию: all
+  -o, --output TEXT               Путь к файлу отчёта (.json, .md, .html)
+  -f, --format TEXT               Формат: json, markdown, html, both, all
+                                  [по умолчанию: markdown]
+  -s, --severity TEXT             Минимальная серьёзность: critical, high, medium, low, info
+                                  [по умолчанию: info]
+  -m, --model TEXT                Модель LLM для AI-анализа
+                                  [по умолчанию: из конфига или openai/gpt-4o]
+  --no-ai                         Пропустить AI-анализ (офлайн)
+  -v, --verbose                   Подробный вывод
+  -c, --config TEXT               Путь к файлу конфигурации
+  --help                          Показать справку
 ```
 
-### Examples
+### Примеры
 
 ```bash
-# Run only security analyzers
+# Только анализаторы безопасности
 code-auditor scan ./src -a bandit -a semgrep --no-ai
 
-# Full scan, save both JSON and Markdown reports
-code-auditor scan ./src -o audit-report -f both
+# Полный скан, сохранить JSON + Markdown + HTML
+code-auditor scan ./src -o audit-report -f all
 
-# Filter: show only high and critical findings
+# Фильтр: только high и critical
 code-auditor scan ./src -s high --no-ai
 
-# Use Claude instead of GPT-4o for AI analysis
+# Использовать Claude вместо GPT-4o
 code-auditor scan ./src -m anthropic/claude-sonnet-4-20250514
 
-# Use local Ollama (no API key needed)
+# Локальный Ollama (без API-ключа)
 code-auditor scan ./src -m ollama/llama3
 
-# Verbose mode — shows which analyzer is running and progress
+# Подробный вывод
 code-auditor scan ./src -v --no-ai
 ```
 
-## AI Analysis Setup
+## Настройка AI
 
-AI analysis requires an API key for your chosen provider.
+AI-анализ требует API-ключ для выбранного провайдера.
 
-### OpenAI (default)
+### DeepSeek (рекомендуется)
 
 ```bash
-export OPENAI_API_KEY=sk-your-key-here
+export DEEPSEEK_API_KEY=sk-ваш-ключ
+code-auditor scan ./src -m deepseek/deepseek-chat
+```
+
+### OpenAI
+
+```bash
+export OPENAI_API_KEY=sk-ваш-ключ
 code-auditor scan ./src
 ```
 
 ### Anthropic Claude
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-your-key-here
+export ANTHROPIC_API_KEY=sk-ant-ваш-ключ
 code-auditor scan ./src -m anthropic/claude-sonnet-4-20250514
 ```
 
-### Ollama (local, free)
+### Ollama (локальный, бесплатно)
 
 ```bash
-# 1. Install Ollama: https://ollama.com
-# 2. Pull a model
+# 1. Установите Ollama: https://ollama.com
+# 2. Скачайте модель
 ollama pull llama3
 
-# 3. Run auditor (no API key needed)
+# 3. Запускайте (API-ключ не нужен)
 code-auditor scan ./src -m ollama/llama3
 ```
 
-### Offline Mode (no LLM)
+### Офлайн (без LLM)
 
 ```bash
 code-auditor scan ./src --no-ai
 ```
 
-## Configuration
+## Конфигурация
 
-Code Auditor reads configuration from `.code-auditor.toml` or `[tool.code-auditor]` in `pyproject.toml`.
+Code Auditor читает конфигурацию из `.code-auditor.toml` или `[tool.code-auditor]` в `pyproject.toml`.
 
-### Quick Setup
+### Быстрая наставка
 
 ```bash
-# Copy the example config to your project root
 cp .code-auditor.example.toml .code-auditor.toml
+# Отредактируйте .code-auditor.toml — вставьте ваш API-ключ
 ```
 
-### Config File (`.code-auditor.toml`)
+### Файл конфигурации (`.code-auditor.toml`)
 
 ```toml
 [llm]
-# Supported: openai/gpt-4o, openai/o3-mini, anthropic/claude-sonnet-4-20250514,
-#            ollama/llama3, deepseek/deepseek-chat, groq/llama-3.1-70b-versatile
-model = "openai/gpt-4o"
-temperature = 0.1       # 0.0 = deterministic, 1.0 = creative
-max_tokens = 4096       # Max tokens per LLM response
-# api_key = "sk-..."    # Overrides OPENAI_API_KEY env var
-# api_base = "http://localhost:11434"  # For Ollama, proxies, etc.
+# Поддерживаемые: openai/gpt-4o, openai/o3-mini, anthropic/claude-sonnet-4-20250514,
+#                 ollama/llama3, deepseek/deepseek-chat, groq/llama-3.1-70b-versatile
+model = "deepseek/deepseek-chat"
+temperature = 0.1       # 0.0 = детерминированно, 1.0 = креативно
+max_tokens = 4096       # Макс. токенов за ответ
+api_key = "sk-ваш-ключ" # Перекрывает переменную окружения
+# api_base = "http://localhost:11434"  # Для Ollama, прокси и т.д.
 
 [analyzers]
-# Skip specific analyzers
-skip = ["vulture", "pip-audit"]
+# Пропустить определённые анализаторы
+skip = []
 
 [report]
-format = "markdown"     # json, markdown, or both
+format = "markdown"     # json, markdown, html, both, all
 severity_threshold = "info"  # critical, high, medium, low, info
-max_file_size_kb = 500  # Max file size to send to LLM
+max_file_size_kb = 500  # Макс. размер файла для LLM
 ```
 
-### Config via `pyproject.toml`
+### Конфиг через `pyproject.toml`
 
 ```toml
 [tool.code-auditor.llm]
@@ -186,7 +195,7 @@ format = "both"
 severity_threshold = "medium"
 ```
 
-### Ready-to-Use Configs
+### Готовые конфиги
 
 #### DeepSeek (замените только ключ)
 
@@ -231,65 +240,50 @@ model = "ollama/llama3"
 api_base = "http://localhost:11434"
 ```
 
-### Config Priority
+### Приоритет конфигурации
 
-1. CLI arguments (highest priority)
-2. `.code-auditor.toml` in project root
-3. `[tool.code-auditor]` in `pyproject.toml`
-4. Defaults
+1. Аргументы CLI (наивысший приоритет)
+2. `.code-auditor.toml` в корне проекта
+3. `[tool.code-auditor]` в `pyproject.toml`
+4. Значения по умолчанию
 
-### Supported LLM Providers
+### Поддерживаемые LLM-провайдеры
 
-| Provider | Model String | API Key Env Var |
-|----------|-------------|-----------------|
+| Провайдер | Строка модели | Env-переменная для ключа |
+|-----------|--------------|--------------------------|
 | OpenAI | `openai/gpt-4o`, `openai/o3-mini` | `OPENAI_API_KEY` |
 | Anthropic | `anthropic/claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |
 | DeepSeek | `deepseek/deepseek-chat` | `DEEPSEEK_API_KEY` |
 | Groq | `groq/llama-3.1-70b-versatile` | `GROQ_API_KEY` |
-| Ollama (local) | `ollama/llama3`, `ollama/codellama` | (none needed) |
+| Ollama (локальный) | `ollama/llama3`, `ollama/codellama` | (не нужен) |
 
-### Custom API Base (Ollama, Proxies)
+## Анализаторы
 
-```toml
-[llm]
-model = "ollama/llama3"
-api_base = "http://localhost:11434"
-```
+| Анализатор | Тип | Что находит |
+|-----------|-----|-------------|
+| **bandit** | Безопасность | SQL-инъекции, XSS, хардкод-секреты, слабая криптография, command injection |
+| **radon** | Сложность | Цикломатическая сложность, индекс поддерживаемости, метрики Halstead |
+| **vulture** | Мёртвый код | Неиспользуемые функции, классы, импорты, переменные |
+| **pylint** | Качество | God objects (R0902/R0904), нарушения SOLID (R0901), дублирование (R0801) |
+| **semgrep** | Безопасность | Taint-анализ, паттерн-based поиск уязвимостей |
+| **pip-audit** | Зависимости | Известные CVE в Python-пакетах |
+| **ai** | Глубокий анализ | Ревью архитектуры, неочевидные уязвимости, паттерны проектирования |
 
-Or via environment:
+### Маппинг OWASP Top 10
 
-```bash
-export OLLAMA_API_BASE=http://localhost:11434
-code-auditor scan ./src -m ollama/llama3
-```
+| OWASP | Категория | Определяется |
+|-------|-----------|-------------|
+| A02 | Сбои криптографии | bandit (B3xx, B5xx) |
+| A03 | Инъекции (SQL, XSS, CMD) | bandit (B6xx, B7xx), semgrep |
+| A05 | Некорректная конфигурация | bandit (B201, B612) |
+| A06 | Уязвимые компоненты | pip-audit |
+| A07 | Сбои аутентификации | bandit (B105-B107) |
+| A08 | Сбои целостности | bandit (B301, B506) |
+| A09 | Логирование и мониторинг | bandit (B110, B112) |
 
-## Analyzers
+## Форматы отчётов
 
-| Analyzer | Type | What it finds |
-|----------|------|---------------|
-| **bandit** | Security | SQL injection, XSS, hardcoded secrets, weak crypto, command injection |
-| **radon** | Complexity | Cyclomatic complexity, maintainability index, Halstead metrics |
-| **vulture** | Dead code | Unused functions, classes, imports, variables |
-| **pylint** | Quality | God objects (R0902/R0904), SOLID violations (R0901), duplication (R0801) |
-| **semgrep** | Security | Taint analysis, pattern-based vulnerability detection |
-| **pip-audit** | Dependencies | Known CVEs in Python packages |
-| **ai** | Deep analysis | Architecture review, subtle vulnerabilities, design patterns |
-
-### OWASP Top 10 Mapping
-
-| OWASP | Category | Detected by |
-|-------|----------|-------------|
-| A02 | Cryptographic Failures | bandit (B3xx, B5xx) |
-| A03 | Injection (SQL, XSS, CMD) | bandit (B6xx, B7xx), semgrep |
-| A05 | Security Misconfiguration | bandit (B201, B612) |
-| A06 | Vulnerable Components | pip-audit |
-| A07 | Authentication Failures | bandit (B105-B107) |
-| A08 | Integrity Failures | bandit (B301, B506) |
-| A09 | Logging & Monitoring | bandit (B110, B112) |
-
-## Report Formats
-
-### Terminal Output
+### Вывод в терминал
 
 ```
 Code Auditor v0.1.0
@@ -311,12 +305,9 @@ Top findings:
 
   [    HIGH] bandit/B605 — Starting a process with a shell...
            at /home/user/my-project/app.py:42
-
-  [  MEDIUM] bandit/B608 — Possible SQL injection...
-           at /home/user/my-project/db.py:18
 ```
 
-### JSON Report
+### JSON-отчёт
 
 ```json
 {
@@ -332,78 +323,34 @@ Top findings:
     "by_category": { "security": 8, "quality": 20, "complexity": 15, "dead_code": 12, "dependency": 3 },
     "by_owasp": { "A03": 5, "A02": 2, "A07": 1 }
   },
-  "findings": [
-    {
-      "tool": "bandit",
-      "rule_id": "B608",
-      "severity": "medium",
-      "category": "security",
-      "owasp_mapping": "A03",
-      "file": "db.py",
-      "line": 18,
-      "message": "Possible SQL injection vector through string-based query construction.",
-      "fix_suggestion": "Use parameterized queries instead of string formatting."
-    }
-  ]
+  "findings": [...]
 }
 ```
 
-### Markdown Report
+### HTML-отчёт
 
-```markdown
-# Code Audit Report
+Интерактивный отчёт с фильтрами по severity, tool, category и поиском по сообщениям. Колонки сортируются по клику.
 
-- **Target**: `/home/user/my-project`
-- **Date**: 2026-07-03T12:00:00+00:00
-- **Tools**: bandit, radon, vulture, pylint, semgrep, pip-audit
-
-## Summary
-
-**Total findings**: 58
-
-### By Severity
-
-| Severity | Count |
-|----------|-------|
-| High | 3 |
-| Medium | 12 |
-| Low | 28 |
-| Info | 15 |
-
-### OWASP Breakdown
-
-| OWASP | Count |
-|-------|-------|
-| A03 | 5 |
-| A02 | 2 |
-| A07 | 1 |
-
-## Findings
-
-### [HIGH] `B605` — bandit
-
-- **Location**: `app.py:42`
-- **Category**: security
-- **OWASP**: A03
-- **Message**: Starting a process with a shell, possible injection detected.
-- **Fix**: Use subprocess.run() with a list of arguments instead of shell=True.
+```bash
+code-auditor scan ./src -o report -f html
+# Откроется файл report.html
 ```
 
-## Exit Codes
+## Коды выхода
 
-| Code | Meaning |
-|------|---------|
-| 0 | No critical or high severity findings |
-| 1 | High severity findings detected |
-| 2 | Critical severity findings detected |
+| Код | Значение |
+|-----|----------|
+| 0 | Нет критических или высоких находок |
+| 1 | Обнаружены находки уровня high |
+| 2 | Обнаружены находки уровня critical |
 
-Use in CI/CD to fail builds on security issues:
+Используйте в CI/CD для прерывания сборки при проблемах безопасности:
 
 ```bash
 code-auditor scan ./src --no-ai -s high || exit 1
 ```
 
-## CI/CD Integration
+## Интеграция с CI/CD
 
 ### GitHub Actions
 
@@ -420,7 +367,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -e ".[analyzers]"
-      - run: code-auditor scan . --no-ai -o audit-report -f both
+      - run: code-auditor scan . --no-ai -o audit-report -f all
       - uses: actions/upload-artifact@v4
         with:
           name: audit-report
@@ -434,15 +381,15 @@ code-audit:
   image: python:3.12
   script:
     - pip install -e ".[analyzers]"
-    - code-auditor scan . --no-ai -o audit-report.json -f json
+    - code-auditor scan . --no-ai -o audit-report -f all
   artifacts:
-    reports:
-      artifact: audit-report.json
+    paths:
+      - audit-report.*
 ```
 
-## Architecture
+## Архитектура
 
-### How It Works
+### Схема работы
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -451,57 +398,92 @@ code-audit:
 └──────────────────────┬──────────────────────────────────────────┘
                        │
           ┌────────────┴────────────┐
-          │     Analyzer Registry   │
+          │     Реестр анализаторов  │
           │      registry.py        │
           └────────────┬────────────┘
                        │
     ┌──────────┬───────┼───────┬──────────┬──────────┐
     ▼          ▼       ▼       ▼          ▼          ▼
  bandit     radon   vulture  pylint    semgrep   pip-audit
- (security) (cc)    (dead)   (quality) (taint)   (deps)
+ (безоп.)  (слож.) (мёртв.) (качеств.) (taint)  (зависим.)
     │          │       │       │          │          │
     └──────────┴───────┴───────┴──────────┴──────────┘
                        │
-              Normalized Findings
-              (Pydantic models)
+              Нормализованные Findings
+              (модели Pydantic)
                        │
           ┌────────────┴────────────┐
-          │      Report Generators   │
+          │     Генераторы отчётов   │
           │  JSON │ Markdown │ HTML  │
           └─────────────────────────┘
 ```
 
-**AI Analysis** runs in parallel with static analyzers, sending code chunks to LLM via LiteLLM:
+**AI-анализ** параллельно со статическими анализаторами отправляет код в LLM через LiteLLM:
 
 ```
 ┌──────────────┐      ┌──────────────────────────────────┐
-│ AI Analyzer  │─────▶│ LiteLLM (multi-provider)          │
+│ AI Analyzer  │─────▶│ LiteLLM (мультипровайдер)         │
 │ ai_analyzer  │      │  OpenAI / Claude / DeepSeek /     │
 │              │◀─────│  Groq / Ollama                    │
 └──────────────┘      └──────────────────────────────────┘
 ```
 
-### Data Flow
+### Поток данных
 
-1. **CLI** parses args, loads config from `.code-auditor.toml` or `pyproject.toml`
-2. **Registry** iterates over selected analyzers (each is a plugin)
-3. Each **Analyzer** runs its tool via `subprocess`, parses output, normalizes to `Finding` model
-4. **AI Analyzer** collects Python files, sends to LLM with security/architecture prompts
-5. All findings are merged, filtered by severity, and wrapped in a `Report`
-6. **Report Generators** serialize to JSON/Markdown/HTML
+1. **CLI** парсит аргументы, загружает конфиг из `.code-auditor.toml` или `pyproject.toml`
+2. **Реестр** перебирает выбранные анализаторы (каждый — плагин)
+3. Каждый **анализатор** запускает свой инструмент через `subprocess`, парсит вывод, нормализует в модель `Finding`
+4. **AI-анализатор** собирает Python-файлы, отправляет в LLM с промптами безопасности/архитектуры
+5. Все находки объединяются, фильтруются по серьёзности, оборачиваются в `Report`
+6. **Генераторы отчётов** сериализуют в JSON/Markdown/HTML
 
-### Key Design Decisions
+### Ключевые дизайн-решения
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Plugin system | Protocol-based (`Analyzer`) | Zero coupling — add analyzers without touching core |
-| Tool discovery | `find_tool()` checks venv bin, then PATH | Works in venvs without modifying PATH |
-| Config cascade | CLI args > `.code-auditor.toml` > `pyproject.toml` > defaults | Flexibility without complexity |
-| LLM abstraction | LiteLLM | One API, 100+ providers, no vendor lock-in |
-| Data models | Pydantic v2 | Validation, serialization, structured output |
-| Report formats | JSON + Markdown + HTML | Machine-readable + human-readable + interactive |
+| Решение | Выбор | Обоснование |
+|---------|-------|-------------|
+| Плагинная система | Protocol-based (`Analyzer`) | Нулевая связанность — добавляйте анализаторы без изменения ядра |
+| Поиск инструментов | `find_tool()` проверяет venv bin, затем PATH | Работает в venv без изменения PATH |
+| Каскад конфигов | CLI > `.code-auditor.toml` > `pyproject.toml` > дефолты | Гибкость без сложности |
+| Абстракция LLM | LiteLLM | Одно API, 100+ провайдеров, без привязки к вендору |
+| Модели данных | Pydantic v2 | Валидация, сериализация, структурированный вывод |
+| Форматы отчётов | JSON + Markdown + HTML | Машиночитаемый + человекочитаемый + интерактивный |
 
-### Adding a New Analyzer
+## Структура проекта
+
+```
+code-auditor/
+├── .code-auditor.example.toml         # Пример конфигурации
+├── pyproject.toml                     # Конфиг пакета + зависимости
+├── src/code_auditor/
+│   ├── cli.py                         # Typer CLI: scan, list-analyzers
+│   ├── config.py                      # Загрузчик конфигов (.toml / pyproject)
+│   ├── models.py                      # Pydantic: Finding, Report, Summary
+│   ├── registry.py                    # Реестр плагинов-анализаторов
+│   ├── analyzers/
+│   │   ├── base.py                    # Протокол Analyzer + find_tool()
+│   │   ├── bandit_analyzer.py         # Безопасность → маппинг OWASP
+│   │   ├── radon_analyzer.py          # CC, индекс поддерживаемости
+│   │   ├── vulture_analyzer.py        # Мёртвый код (с confidence)
+│   │   ├── pylint_analyzer.py         # SOLID, God objects, дублирование
+│   │   ├── semgrep_analyzer.py        # Taint/pattern-анализ
+│   │   ├── pip_audit_analyzer.py      # CVE зависимостей (OWASP A06)
+│   │   └── ai_analyzer.py            # Глубокий LLM-анализ
+│   ├── llm/
+│   │   ├── provider.py               # Обёртка LiteLLM (5 провайдеров)
+│   │   └── prompts.py                # Промпты безопасности и архитектуры
+│   └── reports/
+│       ├── json_report.py            # JSON-вывод
+│       ├── markdown_report.py        # Markdown с таблицами
+│       └── html_report.py            # Интерактивный HTML с фильтрами
+└── tests/
+    ├── test_models.py                # Тесты моделей
+    ├── test_analyzers.py             # Интеграционные тесты анализаторов
+    └── test_cli.py                   # Тесты CLI-команд
+```
+
+## Добавление своих анализаторов
+
+Реализуйте протокол `Analyzer`:
 
 ```python
 # src/code_auditor/analyzers/my_analyzer.py
@@ -513,7 +495,7 @@ class MyAnalyzer:
     name = "my-analyzer"
 
     def analyze(self, path: Path) -> list[Finding]:
-        # Run your tool, parse output, return normalized findings
+        # Запустите ваш инструмент, распарсите вывод
         return [Finding(
             tool=self.name,
             rule_id="MY-001",
@@ -521,96 +503,30 @@ class MyAnalyzer:
             category=Category.QUALITY,
             file="example.py",
             line=10,
-            message="Something found",
+            message="Найдена проблема",
         )]
 ```
 
-Register in `registry.py`:
-```python
-from code_auditor.analyzers.my_analyzer import MyAnalyzer
-register(MyAnalyzer())
-```
-
-## Project Structure
-
-```
-code-auditor/
-├── .code-auditor.example.toml         # Example configuration
-├── pyproject.toml                     # Package config + dependencies
-├── src/code_auditor/
-│   ├── cli.py                         # Typer CLI: scan, list-analyzers
-│   ├── config.py                      # Config loader (.toml / pyproject)
-│   ├── models.py                      # Pydantic: Finding, Report, Summary
-│   ├── registry.py                    # Analyzer plugin registry
-│   ├── analyzers/
-│   │   ├── base.py                    # Analyzer Protocol + find_tool()
-│   │   ├── bandit_analyzer.py         # Security → OWASP mapping
-│   │   ├── radon_analyzer.py          # CC, Maintainability Index
-│   │   ├── vulture_analyzer.py        # Dead code (confidence-scored)
-│   │   ├── pylint_analyzer.py         # SOLID, God objects, duplication
-│   │   ├── semgrep_analyzer.py        # Taint/pattern analysis
-│   │   ├── pip_audit_analyzer.py      # Dependency CVEs (OWASP A06)
-│   │   └── ai_analyzer.py            # LLM deep analysis
-│   ├── llm/
-│   │   ├── provider.py               # LiteLLM wrapper (5 providers)
-│   │   └── prompts.py                # Security + architecture prompts
-│   └── reports/
-│       ├── json_report.py            # JSON output
-│       ├── markdown_report.py        # Markdown with tables
-│       └── html_report.py            # Interactive HTML with filters
-└── tests/
-    ├── test_models.py                # Model serialization tests
-    ├── test_analyzers.py             # Analyzer integration tests
-    └── test_cli.py                   # CLI command tests
-```
-
-## Adding Custom Analyzers
-
-Implement the `Analyzer` protocol:
-
-```python
-from pathlib import Path
-from code_auditor.analyzers.base import Analyzer
-from code_auditor.models import Finding, Category, Severity
-
-class MyAnalyzer:
-    name = "my-analyzer"
-
-    def analyze(self, path: Path) -> list[Finding]:
-        findings = []
-        # Your analysis logic here
-        findings.append(Finding(
-            tool=self.name,
-            rule_id="MY-001",
-            severity=Severity.MEDIUM,
-            category=Category.QUALITY,
-            file="example.py",
-            line=10,
-            message="Something found",
-        ))
-        return findings
-```
-
-Register it in `registry.py`:
+Зарегистрируйте в `registry.py`:
 
 ```python
 from code_auditor.analyzers.my_analyzer import MyAnalyzer
 register(MyAnalyzer())
 ```
 
-## Development
+## Разработка
 
 ```bash
-# Install dev dependencies
+# Установить dev-зависимости
 pip install -e ".[analyzers,dev]"
 
-# Run tests
+# Запустить тесты
 pytest tests/ -v
 
-# Run tests with coverage
+# Тесты с покрытием
 pytest tests/ -v --cov=code_auditor --cov-report=term-missing
 ```
 
-## License
+## Лицензия
 
 MIT
