@@ -440,36 +440,128 @@ code-audit:
       artifact: audit-report.json
 ```
 
+## Architecture
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         CLI (Typer)                             │
+│                    cli.py → config.py                           │
+└──────────────────────┬──────────────────────────────────────────┘
+                       │
+          ┌────────────┴────────────┐
+          │     Analyzer Registry   │
+          │      registry.py        │
+          └────────────┬────────────┘
+                       │
+    ┌──────────┬───────┼───────┬──────────┬──────────┐
+    ▼          ▼       ▼       ▼          ▼          ▼
+ bandit     radon   vulture  pylint    semgrep   pip-audit
+ (security) (cc)    (dead)   (quality) (taint)   (deps)
+    │          │       │       │          │          │
+    └──────────┴───────┴───────┴──────────┴──────────┘
+                       │
+              Normalized Findings
+              (Pydantic models)
+                       │
+          ┌────────────┴────────────┐
+          │      Report Generators   │
+          │  JSON │ Markdown │ HTML  │
+          └─────────────────────────┘
+```
+
+**AI Analysis** runs in parallel with static analyzers, sending code chunks to LLM via LiteLLM:
+
+```
+┌──────────────┐      ┌──────────────────────────────────┐
+│ AI Analyzer  │─────▶│ LiteLLM (multi-provider)          │
+│ ai_analyzer  │      │  OpenAI / Claude / DeepSeek /     │
+│              │◀─────│  Groq / Ollama                    │
+└──────────────┘      └──────────────────────────────────┘
+```
+
+### Data Flow
+
+1. **CLI** parses args, loads config from `.code-auditor.toml` or `pyproject.toml`
+2. **Registry** iterates over selected analyzers (each is a plugin)
+3. Each **Analyzer** runs its tool via `subprocess`, parses output, normalizes to `Finding` model
+4. **AI Analyzer** collects Python files, sends to LLM with security/architecture prompts
+5. All findings are merged, filtered by severity, and wrapped in a `Report`
+6. **Report Generators** serialize to JSON/Markdown/HTML
+
+### Key Design Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Plugin system | Protocol-based (`Analyzer`) | Zero coupling — add analyzers without touching core |
+| Tool discovery | `find_tool()` checks venv bin, then PATH | Works in venvs without modifying PATH |
+| Config cascade | CLI args > `.code-auditor.toml` > `pyproject.toml` > defaults | Flexibility without complexity |
+| LLM abstraction | LiteLLM | One API, 100+ providers, no vendor lock-in |
+| Data models | Pydantic v2 | Validation, serialization, structured output |
+| Report formats | JSON + Markdown + HTML | Machine-readable + human-readable + interactive |
+
+### Adding a New Analyzer
+
+```python
+# src/code_auditor/analyzers/my_analyzer.py
+from pathlib import Path
+from code_auditor.analyzers.base import Analyzer
+from code_auditor.models import Finding, Category, Severity
+
+class MyAnalyzer:
+    name = "my-analyzer"
+
+    def analyze(self, path: Path) -> list[Finding]:
+        # Run your tool, parse output, return normalized findings
+        return [Finding(
+            tool=self.name,
+            rule_id="MY-001",
+            severity=Severity.MEDIUM,
+            category=Category.QUALITY,
+            file="example.py",
+            line=10,
+            message="Something found",
+        )]
+```
+
+Register in `registry.py`:
+```python
+from code_auditor.analyzers.my_analyzer import MyAnalyzer
+register(MyAnalyzer())
+```
+
 ## Project Structure
 
 ```
 code-auditor/
-├── .code-auditor.example.toml         # Example configuration file
-├── pyproject.toml                      # Package config + dependencies
+├── .code-auditor.example.toml         # Example configuration
+├── pyproject.toml                     # Package config + dependencies
 ├── src/code_auditor/
-│   ├── cli.py                          # Typer CLI interface
-│   ├── config.py                       # Configuration loader
-│   ├── models.py                       # Pydantic data models
-│   ├── registry.py                     # Analyzer plugin registry
+│   ├── cli.py                         # Typer CLI: scan, list-analyzers
+│   ├── config.py                      # Config loader (.toml / pyproject)
+│   ├── models.py                      # Pydantic: Finding, Report, Summary
+│   ├── registry.py                    # Analyzer plugin registry
 │   ├── analyzers/
-│   │   ├── base.py                     # Analyzer Protocol + helpers
-│   │   ├── bandit_analyzer.py          # Security (OWASP mapping)
-│   │   ├── radon_analyzer.py           # Complexity metrics
-│   │   ├── vulture_analyzer.py         # Dead code detection
-│   │   ├── pylint_analyzer.py          # Quality / SOLID
-│   │   ├── semgrep_analyzer.py         # Taint / pattern analysis
-│   │   ├── pip_audit_analyzer.py       # Dependency CVEs
-│   │   └── ai_analyzer.py             # LLM deep analysis
+│   │   ├── base.py                    # Analyzer Protocol + find_tool()
+│   │   ├── bandit_analyzer.py         # Security → OWASP mapping
+│   │   ├── radon_analyzer.py          # CC, Maintainability Index
+│   │   ├── vulture_analyzer.py        # Dead code (confidence-scored)
+│   │   ├── pylint_analyzer.py         # SOLID, God objects, duplication
+│   │   ├── semgrep_analyzer.py        # Taint/pattern analysis
+│   │   ├── pip_audit_analyzer.py      # Dependency CVEs (OWASP A06)
+│   │   └── ai_analyzer.py            # LLM deep analysis
 │   ├── llm/
-│   │   ├── provider.py                # LiteLLM multi-provider wrapper
-│   │   └── prompts.py                 # Security / architecture prompts
+│   │   ├── provider.py               # LiteLLM wrapper (5 providers)
+│   │   └── prompts.py                # Security + architecture prompts
 │   └── reports/
-│       ├── json_report.py             # JSON output
-│       └── markdown_report.py         # Markdown output
+│       ├── json_report.py            # JSON output
+│       ├── markdown_report.py        # Markdown with tables
+│       └── html_report.py            # Interactive HTML with filters
 └── tests/
-    ├── test_models.py                 # Data model tests
-    ├── test_analyzers.py              # Analyzer integration tests
-    └── test_cli.py                    # CLI command tests
+    ├── test_models.py                # Model serialization tests
+    ├── test_analyzers.py             # Analyzer integration tests
+    └── test_cli.py                   # CLI command tests
 ```
 
 ## Adding Custom Analyzers

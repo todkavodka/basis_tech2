@@ -14,6 +14,7 @@ from code_auditor.analyzers.ai_analyzer import AIAnalyzer
 from code_auditor.config import Config, load_config
 from code_auditor.models import Finding, Report, Metadata, Severity
 from code_auditor.registry import all_analyzers
+from code_auditor.reports.html_report import write_html
 from code_auditor.reports.json_report import write_json
 from code_auditor.reports.markdown_report import write_markdown
 
@@ -45,7 +46,7 @@ def scan(
     ),
     output_format: Optional[str] = typer.Option(
         None, "-f", "--format",
-        help="Report format: json, markdown, both (default: from config or markdown)",
+        help="Report format: json, markdown, html, both, all (default: from config or markdown)",
     ),
     severity: Optional[str] = typer.Option(
         None, "-s", "--severity",
@@ -156,6 +157,15 @@ def scan(
             md_path = out_path.with_suffix(".md") if final_format == "both" else out_path
             write_markdown(report, md_path)
             console.print(f"[green]Markdown report saved to {md_path}[/green]")
+        if final_format in ("html", "both"):
+            html_path = out_path.with_suffix(".html") if final_format == "both" else out_path
+            write_html(report, html_path)
+            console.print(f"[green]HTML report saved to {html_path}[/green]")
+        if final_format == "all":
+            for fmt, ext, writer in [("json", ".json", write_json), ("markdown", ".md", write_markdown), ("html", ".html", write_html)]:
+                p = out_path.with_suffix(ext)
+                writer(report, p)
+                console.print(f"[green]{fmt.title()} report saved to {p}[/green]")
     else:
         # Print summary table
         s = report.summary
