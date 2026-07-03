@@ -1,0 +1,45 @@
+# Code Auditor Configuration
+# Copy this file to .code-auditor.toml in your project root
+
+[llm]
+# Model: openai/gpt-4o, openai/o3-mini, anthropic/claude-sonnet-4-20250514,
+#        ollama/llama3, deepseek/deepseek-chat, groq/llama-3.1-70b-versatile
+model = "openai/gpt-4o"
+
+# Sampling temperature (0.0 = deterministic, 1.0 = creative)
+temperature = 0.1
+
+# Max tokens per LLM response
+max_tokens = 4096
+
+# API key (overrides environment variable)
+# api_key = "sk-..."
+
+# Custom API base URL (for Ollama, proxies, etc.)
+# api_base = "http://localhost:11434"
+
+[analyzers]
+# Analyzers to skip entirely
+skip = []
+
+# Bandit-specific config
+[analyzers.bandit]
+
+# Radon-specific config
+[analyzers.radon]
+
+# Pylint-specific config
+[analyzers.pylint]
+
+# Semgrep-specific config
+[analyzers.semgrep]
+
+[report]
+# Default report format: json, markdown, both
+format = "markdown"
+
+# Minimum severity to include in reports: critical, high, medium, low, info
+severity_threshold = "info"
+
+# Max file size in KB to send to LLM (larger files are skipped)
+max_file_size_kb = 500

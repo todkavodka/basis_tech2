@@ -138,6 +138,86 @@ code-auditor scan ./src -m ollama/llama3
 code-auditor scan ./src --no-ai
 ```
 
+## Configuration
+
+Code Auditor reads configuration from `.code-auditor.toml` or `[tool.code-auditor]` in `pyproject.toml`.
+
+### Quick Setup
+
+```bash
+# Copy the example config to your project root
+cp .code-auditor.example.toml .code-auditor.toml
+```
+
+### Config File (`.code-auditor.toml`)
+
+```toml
+[llm]
+# Supported: openai/gpt-4o, openai/o3-mini, anthropic/claude-sonnet-4-20250514,
+#            ollama/llama3, deepseek/deepseek-chat, groq/llama-3.1-70b-versatile
+model = "openai/gpt-4o"
+temperature = 0.1       # 0.0 = deterministic, 1.0 = creative
+max_tokens = 4096       # Max tokens per LLM response
+# api_key = "sk-..."    # Overrides OPENAI_API_KEY env var
+# api_base = "http://localhost:11434"  # For Ollama, proxies, etc.
+
+[analyzers]
+# Skip specific analyzers
+skip = ["vulture", "pip-audit"]
+
+[report]
+format = "markdown"     # json, markdown, or both
+severity_threshold = "info"  # critical, high, medium, low, info
+max_file_size_kb = 500  # Max file size to send to LLM
+```
+
+### Config via `pyproject.toml`
+
+```toml
+[tool.code-auditor.llm]
+model = "anthropic/claude-sonnet-4-20250514"
+temperature = 0.0
+
+[tool.code-auditor.analyzers]
+skip = ["semgrep"]
+
+[tool.code-auditor.report]
+format = "both"
+severity_threshold = "medium"
+```
+
+### Config Priority
+
+1. CLI arguments (highest priority)
+2. `.code-auditor.toml` in project root
+3. `[tool.code-auditor]` in `pyproject.toml`
+4. Defaults
+
+### Supported LLM Providers
+
+| Provider | Model String | API Key Env Var |
+|----------|-------------|-----------------|
+| OpenAI | `openai/gpt-4o`, `openai/o3-mini` | `OPENAI_API_KEY` |
+| Anthropic | `anthropic/claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |
+| DeepSeek | `deepseek/deepseek-chat` | `DEEPSEEK_API_KEY` |
+| Groq | `groq/llama-3.1-70b-versatile` | `GROQ_API_KEY` |
+| Ollama (local) | `ollama/llama3`, `ollama/codellama` | (none needed) |
+
+### Custom API Base (Ollama, Proxies)
+
+```toml
+[llm]
+model = "ollama/llama3"
+api_base = "http://localhost:11434"
+```
+
+Or via environment:
+
+```bash
+export OLLAMA_API_BASE=http://localhost:11434
+code-auditor scan ./src -m ollama/llama3
+```
+
 ## Analyzers
 
 | Analyzer | Type | What it finds |
@@ -319,9 +399,11 @@ code-audit:
 
 ```
 code-auditor/
+├── .code-auditor.example.toml         # Example configuration file
 ├── pyproject.toml                      # Package config + dependencies
 ├── src/code_auditor/
 │   ├── cli.py                          # Typer CLI interface
+│   ├── config.py                       # Configuration loader
 │   ├── models.py                       # Pydantic data models
 │   ├── registry.py                     # Analyzer plugin registry
 │   ├── analyzers/

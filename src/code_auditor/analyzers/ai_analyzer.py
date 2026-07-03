@@ -11,6 +11,7 @@ from code_auditor.llm.prompts import (
     build_architecture_prompt,
     build_security_prompt,
 )
+from code_auditor.config import LLMConfig
 from code_auditor.llm.provider import chat_completion
 from code_auditor.models import Category, Finding, Severity
 
@@ -68,8 +69,9 @@ def _parse_llm_json(text: str) -> list[dict]:
 class AIAnalyzer:
     name = "ai"
 
-    def __init__(self, model: str = "openai/gpt-4o") -> None:
+    def __init__(self, model: str = "", config: LLMConfig | None = None) -> None:
         self.model = model
+        self.config = config or LLMConfig()
 
     def analyze(self, path: Path) -> list[Finding]:
         files = _collect_python_files(path)
@@ -83,11 +85,12 @@ class AIAnalyzer:
         try:
             prompt = build_security_prompt(chunks)
             response = chat_completion(
-                model=self.model,
+                model=self.model or self.config.model,
                 messages=[
                     {"role": "system", "content": SECURITY_SYSTEM},
                     {"role": "user", "content": prompt},
                 ],
+                config=self.config,
             )
             for item in _parse_llm_json(response):
                 sev_str = item.get("severity", "medium")
@@ -112,11 +115,12 @@ class AIAnalyzer:
             file_tree = _make_file_tree(path)
             prompt = build_architecture_prompt(file_tree, chunks)
             response = chat_completion(
-                model=self.model,
+                model=self.model or self.config.model,
                 messages=[
                     {"role": "system", "content": ARCHITECTURE_SYSTEM},
                     {"role": "user", "content": prompt},
                 ],
+                config=self.config,
             )
             for item in _parse_llm_json(response):
                 sev_str = item.get("severity", "medium")

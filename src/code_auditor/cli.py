@@ -11,6 +11,7 @@ from rich.table import Table
 
 from code_auditor import __version__
 from code_auditor.analyzers.ai_analyzer import AIAnalyzer
+from code_auditor.config import Config, load_config
 from code_auditor.models import Finding, Report, Metadata, Severity
 from code_auditor.registry import all_analyzers
 from code_auditor.reports.json_report import write_json
@@ -42,23 +43,27 @@ def scan(
         None, "-o", "--output",
         help="Output file path (.json or .md). If omitted, prints to terminal.",
     ),
-    output_format: str = typer.Option(
-        "markdown", "-f", "--format",
-        help="Report format: json, markdown, both",
+    output_format: Optional[str] = typer.Option(
+        None, "-f", "--format",
+        help="Report format: json, markdown, both (default: from config or markdown)",
     ),
-    severity: str = typer.Option(
-        "info", "-s", "--severity",
-        help="Minimum severity to include: critical, high, medium, low, info",
+    severity: Optional[str] = typer.Option(
+        None, "-s", "--severity",
+        help="Minimum severity: critical, high, medium, low, info (default: from config or info)",
     ),
-    model: str = typer.Option(
-        "openai/gpt-4o", "-m", "--model",
-        help="LLM model for AI analysis (e.g., openai/gpt-4o, anthropic/claude-sonnet-4-20250514, ollama/llama3)",
+    model: Optional[str] = typer.Option(
+        None, "-m", "--model",
+        help="LLM model (default: from config or openai/gpt-4o)",
     ),
     no_ai: bool = typer.Option(
         False, "--no-ai", help="Skip AI-powered analysis"
     ),
     verbose: bool = typer.Option(
         False, "-v", "--verbose", help="Verbose output"
+    ),
+    config_path: Optional[str] = typer.Option(
+        None, "-c", "--config",
+        help="Path to config file (.code-auditor.toml or pyproject.toml)",
     ),
 ) -> None:
     """Scan a codebase and generate an audit report."""
@@ -67,13 +72,24 @@ def scan(
         console.print(f"[red]Error: {target} is not a directory[/red]")
         raise typer.Exit(1)
 
+    # Load config (from target dir or specified config)
+    config = load_config(Path(config_path) if config_path else target)
+
+    # CLI args override config
+    final_model = model or config.llm.model
+    final_severity = severity or config.report.severity_threshold
+    final_format = output_format or config.report.format
+
     console.print(f"\n[bold]Code Auditor v{__version__}[/bold]")
-    console.print(f"Target: {target.resolve()}\n")
+    console.print(f"Target: {target.resolve()}")
+    console.print(f"Model: {final_model}")
+    console.print(f"Config: {config_path or 'auto-detected'}\n")
 
     # Discover analyzers
     registry = all_analyzers()
     selected_names = set(analyzer)
     run_all = "all" in selected_names
+    skip_set = set(config.analyzers.skip)
 
     if not run_all:
         available = list(registry.keys())
@@ -88,6 +104,10 @@ def scan(
     tools_used: list[str] = []
 
     for name, analyzer_instance in registry.items():
+        if name in skip_set:
+            if verbose:
+                console.print(f"  [dim]Skipping {name} (configured to skip)[/dim]")
+            continue
         if not run_all and name not in selected_names:
             continue
         if verbose:
@@ -104,19 +124,19 @@ def scan(
     # AI analysis
     if not no_ai and (run_all or "ai" in selected_names):
         if verbose:
-            console.print(f"  Running [cyan]ai ({model})[/cyan]...")
+            console.print(f"  Running [cyan]ai ({final_model})[/cyan]...")
         try:
-            ai = AIAnalyzer(model=model)
+            ai = AIAnalyzer(model=final_model, config=config.llm)
             findings = ai.analyze(target)
             all_findings.extend(findings)
-            tools_used.append(f"ai ({model})")
+            tools_used.append(f"ai ({final_model})")
             if verbose and findings:
                 console.print(f"    Found {len(findings)} issues")
         except Exception as e:
             console.print(f"  [yellow]Warning: AI analysis failed: {e}[/yellow]")
 
     # Filter by severity
-    all_findings = _filter_findings(all_findings, severity)
+    all_findings = _filter_findings(all_findings, final_severity)
 
     # Build report
     report = Report(
@@ -128,12 +148,12 @@ def scan(
     # Output
     if output:
         out_path = Path(output)
-        if output_format in ("json", "both"):
-            json_path = out_path.with_suffix(".json") if output_format == "both" else out_path
+        if final_format in ("json", "both"):
+            json_path = out_path.with_suffix(".json") if final_format == "both" else out_path
             write_json(report, json_path)
             console.print(f"\n[green]JSON report saved to {json_path}[/green]")
-        if output_format in ("markdown", "both"):
-            md_path = out_path.with_suffix(".md") if output_format == "both" else out_path
+        if final_format in ("markdown", "both"):
+            md_path = out_path.with_suffix(".md") if final_format == "both" else out_path
             write_markdown(report, md_path)
             console.print(f"[green]Markdown report saved to {md_path}[/green]")
     else:
