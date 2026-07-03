@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "code-auditor"
+version = "0.1.0"
+description = "AI-powered code auditor: security, quality, architecture analysis"
+requires-python = ">=3.10"
+dependencies = [
+    "typer[all]>=0.12",
+    "rich>=13.0",
+    "pydantic>=2.0",
+    "litellm>=1.0",
+]
+
+[project.optional-dependencies]
+analyzers = [
+    "bandit>=1.7",
+    "radon>=6.0",
+    "vulture>=2.10",
+    "pylint>=3.0",
+    "semgrep>=1.50",
+    "pip-audit>=2.6",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[project.scripts]
+code-auditor = "code_auditor.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/code_auditor"]
