@@ -186,6 +186,51 @@ format = "both"
 severity_threshold = "medium"
 ```
 
+### Ready-to-Use Configs
+
+#### DeepSeek (замените только ключ)
+
+```toml
+# .code-auditor.toml
+[llm]
+model = "deepseek/deepseek-chat"
+api_key = "sk-ваш-ключ-здесь"
+temperature = 0.1
+max_tokens = 4096
+```
+
+#### OpenAI
+
+```toml
+[llm]
+model = "openai/gpt-4o"
+api_key = "sk-ваш-ключ-здесь"
+```
+
+#### Anthropic Claude
+
+```toml
+[llm]
+model = "anthropic/claude-sonnet-4-20250514"
+api_key = "sk-ant-ваш-ключ-здесь"
+```
+
+#### Groq (быстрый, бесплатный тир)
+
+```toml
+[llm]
+model = "groq/llama-3.1-70b-versatile"
+api_key = "gsk_ваш-ключ-здесь"
+```
+
+#### Ollama (локальный, без ключа)
+
+```toml
+[llm]
+model = "ollama/llama3"
+api_base = "http://localhost:11434"
+```
+
 ### Config Priority
 
 1. CLI arguments (highest priority)
