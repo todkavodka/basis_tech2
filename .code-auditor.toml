@@ -1,0 +1,13 @@
+[llm]
+model = "deepseek/deepseek-chat"
+api_key = "sk-426299e58d394ecfadce7cf0e4ed5202"
+temperature = 0.1
+max_tokens = 4096
+
+[analyzers]
+skip = []
+
+[report]
+format = "markdown"
+severity_threshold = "info"
+max_file_size_kb = 500

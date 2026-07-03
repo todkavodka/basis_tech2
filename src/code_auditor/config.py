@@ -53,22 +53,47 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def load_config(project_root: Path | None = None) -> Config:
-    """Load configuration from .code-auditor.toml or pyproject.toml."""
-    root = project_root or Path.cwd()
-    data: dict[str, Any] = {}
-
-    # 1. Try .code-auditor.toml
+def _try_load(root: Path) -> dict[str, Any]:
+    """Try to load config from a single directory."""
+    # 1. .code-auditor.toml
     toml_path = root / ".code-auditor.toml"
     if toml_path.exists():
         with open(toml_path, "rb") as f:
-            data = tomllib.load(f)
+            return tomllib.load(f)
 
-    # 2. Try pyproject.toml [tool.code-auditor]
+    # 2. pyproject.toml [tool.code-auditor]
     pyproject = root / "pyproject.toml"
-    if pyproject.exists() and not data:
+    if pyproject.exists():
         with open(pyproject, "rb") as f:
             full = tomllib.load(f)
         data = full.get("tool", {}).get("code-auditor", {})
+        if data:
+            return data
 
-    return Config(**data) if data else Config()
+    return {}
+
+
+def load_config(project_root: Path | None = None) -> Config:
+    """Load configuration from .code-auditor.toml or pyproject.toml.
+
+    Search order:
+      1. project_root (target directory being scanned)
+      2. current working directory
+      3. defaults
+    """
+    cwd = Path.cwd()
+    root = project_root or cwd
+
+    # Load from target dir first, then overlay from cwd
+    data: dict[str, Any] = {}
+    if root != cwd:
+        data = _try_load(root)
+    cwd_data = _try_load(cwd)
+
+    # CWD config takes priority over target dir config
+    merged = {**data, **cwd_data}
+    # Deep merge LLM section if both exist
+    if "llm" in data and "llm" in cwd_data:
+        merged["llm"] = {**data["llm"], **cwd_data["llm"]}
+
+    return Config(**merged) if merged else Config()
