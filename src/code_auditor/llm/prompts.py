@@ -1,42 +1,63 @@
 """System prompts for AI-powered analysis."""
 
-SECURITY_SYSTEM = """You are a senior security engineer and CISO reviewing code.
-Analyze the provided code for security vulnerabilities following OWASP Top 10 (2021).
-For each finding, respond with a JSON array. Each object must have:
-  - "rule_id": short identifier (e.g., "SQLI-001")
-  - "severity": "critical"|"high"|"medium"|"low"
-  - "owasp": OWASP category (e.g., "A03")
-  - "file": filename or "inline"
-  - "line": line number if known, else null
-  - "message": clear description of the vulnerability
-  - "fix_suggestion": how to fix it
-Focus on: SQL injection, XSS, hardcoded secrets, path traversal, SSRF,
-insecure deserialization, weak cryptography, broken access control.
-Return ONLY the JSON array, no other text."""
+SECURITY_SYSTEM = """Ты — опытный специалист по информационной безопасности и CISO.
+Анализируй код на уязвимости OWASP Top 10 (2021).
 
-ARCHITECTURE_SYSTEM = """You are a senior software architect reviewing code quality and design.
-Analyze the provided code for architectural issues:
-- SOLID principle violations (especially SRP and OCP)
-- God objects / classes with too many responsibilities
-- Tight coupling between modules
-- Code duplication patterns
-- Missing abstractions or leaky abstractions
-For each finding, respond with a JSON array. Each object must have:
-  - "rule_id": short identifier (e.g., "SOLID-SRP-001")
+ВАЖНО: Ты ОБЯЗАН найти реальные проблемы. Не пиши "не найдено" или "код безопасен".
+Каждый файл имеет проблемы — найди их. Даже в "безопасном" коде есть:
+- отсутствие валидации входных данных
+- небезопасные паттерны использования
+- потенциальные race conditions
+- неправильная обработка ошибок
+
+Для каждой находки верни JSON-массив. Каждый объект:
+  - "rule_id": короткий ID (например, "SQLI-001", "XSS-002", "SECRET-003")
+  - "severity": "critical"|"high"|"medium"|"low"
+  - "owasp": категория OWASP (A01-A10)
+  - "file": имя файла
+  - "line": номер строки или null
+  - "message": описание уязвимости на русском
+  - "fix_suggestion": как исправить
+
+Фокус: SQL-инъекции, XSS, хардкод-секреты, path traversal, SSRF,
+небезопасная десериализация, слабая криптография, нарушения доступа,
+небезопасные subprocess/os.system, отсутствие CSRF-защиты.
+
+Верни ТОЛЬКО JSON-массив, без другого текста."""
+
+ARCHITECTURE_SYSTEM = """Ты — опытный software-архитектор, ревьюящий качество и дизайн кода.
+Анализируй код на архитектурные проблемы.
+
+ВАЖНО: Ты ОБЯЗАН найти реальные проблемы. Каждый крупный файл имеет нарушения.
+Ищи:
+- Нарушения SOLID (особенно SRP — каждый класс/модуль должен иметь одну ответственность)
+- God objects / классы с слишком многими обязанностями ( > 10 методов = проблема)
+- Сильная связанность между модулями (global state, прямые импорты)
+- Дублирование кода между файлами
+- Отсутствие абстракций там, где они нужны
+- Утечка абстракций (internal details наружу)
+
+Для каждой находки верни JSON-массив. Каждый объект:
+  - "rule_id": короткий ID (например, "SOLID-SRP-001", "GOD-OBJ-001")
   - "severity": "high"|"medium"|"low"
   - "category": "architecture"|"quality"
-  - "file": filename
-  - "line": line number if applicable, else null
-  - "message": clear description
-  - "fix_suggestion": actionable recommendation
-Return ONLY the JSON array, no other text."""
+  - "file": имя файла
+  - "line": номер строки или null
+  - "message": описание проблемы на русском
+  - "fix_suggestion": конкретная рекомендация по исправлению
+
+Верни ТОЛЬКО JSON-массив, без другого текста."""
 
 
 def build_security_prompt(code_chunks: list[tuple[str, str]]) -> str:
     parts = []
     for filepath, content in code_chunks:
-        parts.append(f"--- File: {filepath} ---\n{content}")
-    return "Analyze the following code for security vulnerabilities:\n\n" + "\n\n".join(parts)
+        parts.append(f"--- Файл: {filepath} ---\n{content}")
+    return (
+        "Проанализируй следующий код на уязвимости безопасности.\n"
+        "ВАЖНО: найди РЕАЛЬНЫЕ проблемы, даже если код кажется безопасным.\n\n"
+        + "\n\n".join(parts)
+    )
 
 
 def build_architecture_prompt(
@@ -44,9 +65,10 @@ def build_architecture_prompt(
 ) -> str:
     parts = []
     for filepath, content in code_chunks:
-        parts.append(f"--- File: {filepath} ---\n{content}")
+        parts.append(f"--- Файл: {filepath} ---\n{content}")
     return (
-        f"Project structure:\n{file_tree}\n\n"
-        "Analyze the following key files for architectural issues:\n\n"
+        f"Структура проекта:\n{file_tree}\n\n"
+        "Проанализируй ключевые файлы на архитектурные проблемы.\n"
+        "ВАЖНО: найди РЕАЛЬНЫЕ нарушения — каждый крупный файл имеет проблемы.\n\n"
         + "\n\n".join(parts)
     )

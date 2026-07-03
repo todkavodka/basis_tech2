@@ -11,30 +11,34 @@ from code_auditor.llm.prompts import (
     build_architecture_prompt,
     build_security_prompt,
 )
-from code_auditor.config import LLMConfig
+from code_auditor.config import LLMConfig, load_config
 from code_auditor.llm.provider import chat_completion
 from code_auditor.models import Category, Finding, Severity
 
-# Max bytes per file to send to LLM
-MAX_FILE_BYTES = 30_000
-# Max files to include in a single prompt
-MAX_FILES = 15
+MAX_FILE_BYTES = 20_000
+MAX_FILES = 10
+
+CODE_EXTENSIONS = {".py", ".js", ".ts", ".go", ".rs", ".java", ".rb", ".php"}
+CONFIG_EXTENSIONS = {".toml", ".yaml", ".yml", ".cfg", ".ini"}
+SKIP_DIRS = {"__pycache__", ".venv", "node_modules", ".git", "dist", "build", ".tox", ".eggs"}
 
 
-def _collect_python_files(path: Path) -> list[Path]:
-    return sorted(
-        p
-        for p in path.rglob("*.py")
-        if p.is_file()
-        and "__pycache__" not in str(p)
-        and ".venv" not in str(p)
-        and "node_modules" not in str(p)
-    )
+def _collect_files(path: Path) -> list[Path]:
+    files: list[Path] = []
+    for p in sorted(path.rglob("*")):
+        if not p.is_file():
+            continue
+        if any(skip in p.parts for skip in SKIP_DIRS):
+            continue
+        ext = p.suffix.lower()
+        if ext in CODE_EXTENSIONS or ext in CONFIG_EXTENSIONS:
+            files.append(p)
+    return files[:MAX_FILES]
 
 
 def _read_chunks(files: list[Path]) -> list[tuple[str, str]]:
     chunks: list[tuple[str, str]] = []
-    for f in files[:MAX_FILES]:
+    for f in files:
         try:
             content = f.read_text(errors="replace")[:MAX_FILE_BYTES]
             chunks.append((str(f), content))
@@ -47,19 +51,31 @@ def _make_file_tree(path: Path) -> str:
     lines: list[str] = []
     for p in sorted(path.rglob("*")):
         if p.is_file() and "__pycache__" not in str(p) and ".venv" not in str(p):
-            rel = p.relative_to(path)
-            lines.append(str(rel))
+            lines.append(str(p.relative_to(path)))
     return "\n".join(lines[:100])
 
 
 def _parse_llm_json(text: str) -> list[dict]:
     text = text.strip()
-    # Extract JSON array from markdown fences if present
-    if "```" in text:
-        start = text.find("[")
-        end = text.rfind("]")
-        if start != -1 and end != -1:
-            text = text[start : end + 1]
+    # Remove markdown code fences
+    lines = text.split("\n")
+    if lines and lines[0].strip().startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    text = "\n".join(lines).strip()
+
+    # Find JSON array bounds
+    start = text.find("[")
+    end = text.rfind("]")
+    if start != -1 and end > start:
+        text = text[start : end + 1]
+    elif start != -1:
+        # Truncated - try to close it
+        last_brace = text.rfind("}")
+        if last_brace > start:
+            text = text[start : last_brace + 1] + "]"
+
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -71,21 +87,22 @@ class AIAnalyzer:
 
     def __init__(self, model: str = "", config: LLMConfig | None = None) -> None:
         self.model = model
-        self.config = config or LLMConfig()
+        self.config = config or load_config().llm
 
     def analyze(self, path: Path) -> list[Finding]:
-        files = _collect_python_files(path)
+        files = _collect_files(path)
         if not files:
             return []
 
         chunks = _read_chunks(files)
         findings: list[Finding] = []
+        model = self.model or self.config.model
 
         # Security analysis
         try:
             prompt = build_security_prompt(chunks)
             response = chat_completion(
-                model=self.model or self.config.model,
+                model=model,
                 messages=[
                     {"role": "system", "content": SECURITY_SYSTEM},
                     {"role": "user", "content": prompt},
@@ -94,28 +111,26 @@ class AIAnalyzer:
             )
             for item in _parse_llm_json(response):
                 sev_str = item.get("severity", "medium")
-                findings.append(
-                    Finding(
-                        tool="ai-security",
-                        rule_id=item.get("rule_id", "AI-SEC"),
-                        severity=Severity(sev_str) if sev_str in Severity.__members__.values() else Severity.MEDIUM,
-                        category=Category.SECURITY,
-                        owasp_mapping=item.get("owasp", "N/A"),
-                        file=item.get("file"),
-                        line=item.get("line"),
-                        message=item.get("message", ""),
-                        fix_suggestion=item.get("fix_suggestion", ""),
-                    )
-                )
+                findings.append(Finding(
+                    tool="ai-security",
+                    rule_id=item.get("rule_id", "AI-SEC"),
+                    severity=Severity(sev_str) if sev_str in Severity.__members__.values() else Severity.MEDIUM,
+                    category=Category.SECURITY,
+                    owasp_mapping=item.get("owasp", "N/A"),
+                    file=item.get("file"),
+                    line=item.get("line"),
+                    message=item.get("message", ""),
+                    fix_suggestion=item.get("fix_suggestion", ""),
+                ))
         except Exception:
-            pass  # LLM failure is non-fatal
+            pass
 
         # Architecture analysis
         try:
             file_tree = _make_file_tree(path)
             prompt = build_architecture_prompt(file_tree, chunks)
             response = chat_completion(
-                model=self.model or self.config.model,
+                model=model,
                 messages=[
                     {"role": "system", "content": ARCHITECTURE_SYSTEM},
                     {"role": "user", "content": prompt},
@@ -124,19 +139,17 @@ class AIAnalyzer:
             )
             for item in _parse_llm_json(response):
                 sev_str = item.get("severity", "medium")
-                findings.append(
-                    Finding(
-                        tool="ai-architecture",
-                        rule_id=item.get("rule_id", "AI-ARCH"),
-                        severity=Severity(sev_str) if sev_str in Severity.__members__.values() else Severity.MEDIUM,
-                        category=Category.ARCHITECTURE,
-                        owasp_mapping="N/A",
-                        file=item.get("file"),
-                        line=item.get("line"),
-                        message=item.get("message", ""),
-                        fix_suggestion=item.get("fix_suggestion", ""),
-                    )
-                )
+                findings.append(Finding(
+                    tool="ai-architecture",
+                    rule_id=item.get("rule_id", "AI-ARCH"),
+                    severity=Severity(sev_str) if sev_str in Severity.__members__.values() else Severity.MEDIUM,
+                    category=Category.ARCHITECTURE,
+                    owasp_mapping="N/A",
+                    file=item.get("file"),
+                    line=item.get("line"),
+                    message=item.get("message", ""),
+                    fix_suggestion=item.get("fix_suggestion", ""),
+                ))
         except Exception:
             pass
 
